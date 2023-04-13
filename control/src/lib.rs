@@ -1,7 +1,8 @@
 #![no_std]
 #![forbid(unsafe_code)]
 
-use tiny_fn::tiny_fn;
+extern crate alloc;
+use alloc::boxed::Box;
 
 pub struct Wheels<'a> {
     state: WheelState,
@@ -20,39 +21,66 @@ impl<'a> Wheels<'a> {
         }
     }
 
-    pub fn process_command(&mut self, WheelCommand(command): WheelCommand) {
+    pub fn apply_command(&mut self, WheelCommand(command): WheelCommand) {
         match command {
             Commands::MoveForward => {
                 self.state = WheelState::MovingForward;
-                WheelCallbacks::call(&self.callbacks.moving_forward, 0, 0);
+                WheelCallbacks::call(&self.callbacks.moving_forward, self.speed.0, 0);
             }
             Commands::MoveBackward => {
                 self.state = WheelState::MovingBackward;
-                WheelCallbacks::call(&self.callbacks.moving_backward, 0, 0);
+                WheelCallbacks::call(&self.callbacks.moving_backward, self.speed.0, 0);
             }
             Commands::RotateRight => {
                 self.state = WheelState::TurningToTheRight;
-                WheelCallbacks::call(&self.callbacks.turning_to_the_right, 0, 0);
+                WheelCallbacks::call(
+                    &self.callbacks.turning_to_the_right,
+                    self.speed.0,
+                    counter_speed(&self.counter_rotation_multiplier, &self.speed),
+                );
             }
             Commands::RotateLeft => {
                 self.state = WheelState::TurningToTheLeft;
-                WheelCallbacks::call(&self.callbacks.turning_to_the_left, 0, 0);
+                WheelCallbacks::call(
+                    &self.callbacks.turning_to_the_left,
+                    self.speed.0,
+                    counter_speed(&self.counter_rotation_multiplier, &self.speed),
+                );
             }
             Commands::Stop => {
                 self.state = WheelState::Stopped;
-                WheelCallbacks::call(&self.callbacks.stopped, 0, 0);
+                WheelCallbacks::call(&self.callbacks.stopped, self.speed.0, 0);
             }
             Commands::RotateRightWithCounterRotation(x) => {
                 self.state = WheelState::TurningToTheRight;
                 self.counter_rotation_multiplier = Some(x);
-                WheelCallbacks::call(&self.callbacks.turning_to_the_right, 0, 0);
+                WheelCallbacks::call(
+                    &self.callbacks.turning_to_the_right,
+                    self.speed.0,
+                    counter_speed(&self.counter_rotation_multiplier, &self.speed),
+                );
             }
             Commands::RotateLeftWithCounterRotation(x) => {
                 self.state = WheelState::TurningToTheLeft;
                 self.counter_rotation_multiplier = Some(x);
-                WheelCallbacks::call(&self.callbacks.turning_to_the_left, 0, 0);
+                WheelCallbacks::call(
+                    &self.callbacks.turning_to_the_left,
+                    self.speed.0,
+                    counter_speed(&self.counter_rotation_multiplier, &self.speed),
+                );
             }
             Commands::ChangeSpeed(x) => self.speed = x,
+        }
+
+        fn counter_speed(
+            counter: &Option<CounterRotationMultiplier>,
+            base_speed: &WheelSpeed,
+        ) -> u8 {
+            if let Some(counter_rotation) = counter {
+                counter_rotation.get_wheel_speed(base_speed).0
+            } else {
+                base_speed.0
+            }
         }
     }
 
@@ -84,8 +112,16 @@ enum WheelState {
     Stopped,
 }
 
-tiny_fn! {
-    pub struct WheelCallback = Fn(a: u32, b: u32);
+pub struct WheelCallback<'a>(Box<dyn Fn(u8, u8) + 'a>);
+
+impl<'a> WheelCallback<'a> {
+    pub fn new<F: Fn(u8, u8) + 'a>(callback: F) -> Self {
+        Self(Box::new(callback))
+    }
+
+    fn call(&self, a: u8, b: u8) {
+        self.0(a, b);
+    }
 }
 
 #[derive(Default)]
@@ -98,7 +134,7 @@ struct WheelCallbacks<'a> {
 }
 
 impl<'a> WheelCallbacks<'a> {
-    fn call(callback: &Option<WheelCallback>, a: u32, b: u32) {
+    fn call(callback: &Option<WheelCallback>, a: u8, b: u8) {
         match callback {
             Some(callback) => callback.call(a, b),
             None => (),
@@ -270,38 +306,84 @@ mod tests {
     fn wheel_processing_commands() {
         let mut wheels = Wheels::new();
         // MoveForward,
-        wheels.process_command(WheelCommand::move_forward());
+        wheels.apply_command(WheelCommand::move_forward());
         assert_eq!(wheels.state, WheelState::MovingForward);
         // MoveBackward,
-        wheels.process_command(WheelCommand::move_backward());
+        wheels.apply_command(WheelCommand::move_backward());
         assert_eq!(wheels.state, WheelState::MovingBackward);
         // RotateRight,
-        wheels.process_command(WheelCommand::rotate_right());
+        wheels.apply_command(WheelCommand::rotate_right());
         assert_eq!(wheels.state, WheelState::TurningToTheRight);
         assert_eq!(wheels.counter_rotation_multiplier, None);
         // RotateLeft,
-        wheels.process_command(WheelCommand::rotate_left());
+        wheels.apply_command(WheelCommand::rotate_left());
         assert_eq!(wheels.state, WheelState::TurningToTheLeft);
         assert_eq!(wheels.counter_rotation_multiplier, None);
         // Stop,
-        wheels.process_command(WheelCommand::stop());
+        wheels.apply_command(WheelCommand::stop());
         assert_eq!(wheels.state, WheelState::Stopped);
         // RotateRightWithCounterRotation(CounterRotationMultiplier),
-        wheels.process_command(WheelCommand::rotate_right_with_counter(2));
+        wheels.apply_command(WheelCommand::rotate_right_with_counter(2));
         assert_eq!(wheels.state, WheelState::TurningToTheRight);
         assert_eq!(
             wheels.counter_rotation_multiplier,
             Some(CounterRotationMultiplier::new(2))
         );
         // RotateLeftWithCounterRotation(CounterRotationMultiplier),
-        wheels.process_command(WheelCommand::rotate_left_with_counter(1));
+        wheels.apply_command(WheelCommand::rotate_left_with_counter(1));
         assert_eq!(wheels.state, WheelState::TurningToTheLeft);
         assert_eq!(
             wheels.counter_rotation_multiplier,
             Some(CounterRotationMultiplier::new(1))
         );
         // ChangeSpeed(WheelSpeed),
-        wheels.process_command(WheelCommand::change_speed(23));
+        wheels.apply_command(WheelCommand::change_speed(23));
         assert_eq!(wheels.speed, WheelSpeed::new(23));
+    }
+
+    #[test]
+    fn no_arg_callbacks_are_given_the_wheel_speed_and_zero() {
+        let wheel_speed = 1;
+
+        let test_for_zero_callback =
+            || WheelCallback::new(|a, b| assert_eq!((wheel_speed, 0), (a, b)));
+
+        let mut wheels = Wheels::new();
+        wheels.speed = WheelSpeed::new(wheel_speed);
+        wheels.set_move_forward_callback(test_for_zero_callback());
+        wheels.set_move_backward_callback(test_for_zero_callback());
+        wheels.set_stopped_callback(test_for_zero_callback());
+
+        // These call the callbacks.
+        wheels.apply_command(WheelCommand::move_forward());
+        wheels.apply_command(WheelCommand::move_backward());
+        wheels.apply_command(WheelCommand::stop());
+    }
+
+    #[test]
+    fn rotation_callbacks_are_given_speed_and_counter_rotation_speed() {
+        let wheel_speed = 1;
+
+        let test_for_speed_and_counter_speed =
+            || WheelCallback::new(|a, b| assert_eq!((wheel_speed, wheel_speed), (a, b)));
+
+        let test_for_speed_and_modified_counter_speed =
+            || WheelCallback::new(|a, b| assert_eq!((wheel_speed, wheel_speed * 2), (a, b)));
+
+        let mut wheels = Wheels::new();
+        wheels.speed = WheelSpeed::new(wheel_speed);
+        wheels.set_turn_right_callback(test_for_speed_and_counter_speed());
+        wheels.set_turn_left_callback(test_for_speed_and_counter_speed());
+
+        // These call the callbacks
+        wheels.apply_command(WheelCommand::rotate_right());
+        wheels.apply_command(WheelCommand::rotate_left());
+
+        wheels.set_turn_right_callback(test_for_speed_and_modified_counter_speed());
+        wheels.set_turn_left_callback(test_for_speed_and_modified_counter_speed());
+
+        // These call the callbacks
+        wheels.apply_command(WheelCommand::rotate_right_with_counter(2));
+        wheels.apply_command(WheelCommand::rotate_left_with_counter(2));
     }
 }

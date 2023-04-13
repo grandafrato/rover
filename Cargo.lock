@@ -5,16 +5,7 @@ version = 3
 [[package]]
 name = "control"
 version = "0.1.0"
-dependencies = [
- "tiny-fn",
-]
 
 [[package]]
 name = "firmware"
 version = "0.1.0"
-
-[[package]]
-name = "tiny-fn"
-version = "0.1.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "af7b2c33e09916c65a15c92c1e583946052527e06102689ed11c6125f64fa8ba"
