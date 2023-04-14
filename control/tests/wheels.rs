@@ -1,4 +1,4 @@
-use control::{WheelCallback, WheelCommand, Wheels};
+use control::wheels::{WheelCallback, WheelCommand, Wheels};
 use std::sync::Mutex;
 
 #[test]
