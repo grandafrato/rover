@@ -7,7 +7,7 @@ to the hardware will be in the firmware section. Eventually there will also be
 another crate added to control the rover from another computer.
 
 ## Roadmap
-- [ ] Control Logic
+- [x] Control Logic
 - [ ] Firmware Prototype
 - [ ] Circuits Tested
 - [ ] Final Hardware Assembled

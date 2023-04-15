@@ -1,3 +1,15 @@
 [workspace]
 
 members = ["control", "firmware"]
+
+[profile.dev]
+opt-level = 1
+codegen-units = 16
+debug = true
+lto = false
+
+[profile.release]
+opt-level = "s"
+codegen-units = 1
+debug = true
+lto = true
